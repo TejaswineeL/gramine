@@ -1988,6 +1988,28 @@ int ocall_eventfd(int flags) {
     return retval;
 }
 
+int ocall_ioctl(int fd, unsigned int cmd, unsigned long arg) {
+    int retval;
+
+    void* old_ustack = sgx_prepare_ustack();
+    ms_ocall_ioctl_t* ms = sgx_alloc_on_ustack_aligned(sizeof(*ms), alignof(*ms));
+    if (!ms) {
+        sgx_reset_ustack(old_ustack);
+        return -EPERM;
+    }
+
+    WRITE_ONCE(ms->ms_fd, fd);
+    WRITE_ONCE(ms->ms_cmd, cmd);
+    WRITE_ONCE(ms->ms_arg, arg);
+
+    retval = sgx_exitless_ocall(OCALL_IOCTL, ms);
+    /* in general case, IOCTL may return any error code (the list of possible error codes is not
+     * standardized and is up to the Linux driver/kernel module), so no check of `retval` here */
+
+    sgx_reset_ustack(old_ustack);
+    return retval;
+}
+
 int ocall_get_quote(const sgx_spid_t* spid, bool linkable, const sgx_report_t* report,
                     const sgx_quote_nonce_t* nonce, char** quote, size_t* quote_len) {
     int retval;

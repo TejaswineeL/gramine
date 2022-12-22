@@ -13,6 +13,12 @@ tests = {
     },
     'devfs': {},
     'device_passthrough': {},
+    'device_ioctl': {
+        'include_directories': include_directories(
+            # for `gramine_test_dev_ioctl.h`
+            '/usr/local/include/',
+        ),
+    },
     'double_fork': {},
     'epoll_epollet': {},
     'epoll_test': {},
