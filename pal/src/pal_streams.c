@@ -207,7 +207,7 @@ int PalStreamRead(PAL_HANDLE handle, uint64_t offset, size_t* count, void* buffe
 
 int64_t _PalStreamWrite(PAL_HANDLE handle, uint64_t offset, uint64_t count, const void* buf) {
     const struct handle_ops* ops = HANDLE_OPS(handle);
-
+    log_error("WINEE  at palStreamWrite buf ptr %p ", buf);
     if (!ops)
         return -PAL_ERROR_BADHANDLE;
 

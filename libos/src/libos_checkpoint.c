@@ -119,7 +119,7 @@ struct libos_cp_map_entry* get_cp_map_entry(void* _map, void* addr, bool create)
     new->entry.off  = 0;
     return &new->entry;
 }
-
+static long long  int read_size=0;
 BEGIN_CP_FUNC(memory) {
     struct libos_mem_entry* entry = (void*)(base + ADD_CP_OFFSET(sizeof(*entry)));
 
@@ -130,7 +130,9 @@ BEGIN_CP_FUNC(memory) {
 
     store->first_mem_entry = entry;
     store->mem_entries_cnt++;
-
+    read_size+=entry->size;
+    log_error("READ cpstore->mem_entries_cnt %lu read from %p mem_protect_flag %d ",  store->mem_entries_cnt, entry->addr, entry->prot);
+    log_error("READ cpstore->mem_entries_cnt %lu size %lu, cumulative size %lld", store->mem_entries_cnt, entry->size, read_size);
     if (objp)
         *objp = entry;
 }
@@ -211,6 +213,8 @@ static int send_memory_on_stream(PAL_HANDLE stream, struct libos_cp_store* store
     int ret = 0;
 
     struct libos_mem_entry* entry = store->first_mem_entry;
+    log_error(" TEJASWINEE1 send_memory_on_stream first_mem_entry %p first_mem_size %lu number of entries %lu, ", entry->addr, entry->size, store->mem_entries_cnt);
+   long long int iter=0, write_sum=0;
     while (entry) {
         size_t           mem_size = entry->size;
         void*            mem_addr = entry->addr;
@@ -220,25 +224,32 @@ static int send_memory_on_stream(PAL_HANDLE stream, struct libos_cp_store* store
             /* make the area readable */
             ret = PalVirtualMemoryProtect(mem_addr, mem_size, mem_prot | PAL_PROT_READ);
             if (ret < 0) {
+                log_error("WINEE failed at send_memory_on_stream cause of first PalVirtualMemoryProtect ");
                 return pal_to_unix_errno(ret);
             }
         }
+        log_error(" TEJASWINEE send_memory_on_stream first_mem_entry %p first_mem_size %lu", entry->addr, entry->size);
+        write_sum+=entry->size;
+        log_error("WRITE START WRITE_EXACT iteration %lld first_mem_entry %p first_mem_size %lu cumulative size %lld ", iter, entry->addr, entry->size, write_sum);
 
         ret = write_exact(stream, mem_addr, mem_size);
-
+        log_error("WINEE ret value at END write_exact %d", ret);
         if (!(mem_prot & PAL_PROT_READ) && mem_size > 0) {
             /* the area was made readable above; revert to original permissions */
             int ret2 = PalVirtualMemoryProtect(mem_addr, mem_size, mem_prot);
             if (ret2 < 0 && !ret) {
+                log_error("WINEE failed at send_memory_on_stream cause of second PalVirtualMemoryProtect ");
                 ret = pal_to_unix_errno(ret2);
             }
         }
 
         if (ret < 0) {
+            log_error("WINEE failed at send_memory_on_stream without second PalVirtualMemoryProtect ret= %d ", ret);
             return ret;
         }
 
         entry = entry->next;
+        iter=iter+1;
     }
 
     return 0;
@@ -246,11 +257,14 @@ static int send_memory_on_stream(PAL_HANDLE stream, struct libos_cp_store* store
 
 static int send_checkpoint_on_stream(PAL_HANDLE stream, struct libos_cp_store* store) {
     /* first send non-memory entries found at [store->base, store->base + store->offset) */
+    log_error("TEJASWINEE send_checkpoint_on_stream before write_exact base %zx, offset %lu", store->base, store->offset);
     int ret = write_exact(stream, (void*)store->base, store->offset);
+    log_error("TEJASWINEE send_checkpoint_on_stream after write_exact base %zx, offset %lu", store->base, store->offset);
     if (ret < 0) {
+        log_error("WINEE failed at send_checkpoint_on_stream cause of write_exact");
         return ret;
     }
-
+    log_error("JASWINEE START send_memory_on_stream ");
     return send_memory_on_stream(stream, store);
 }
 
@@ -312,7 +326,9 @@ static int receive_memory_on_stream(PAL_HANDLE handle, struct checkpoint_hdr* hd
             }
 
             ret = read_exact(handle, entry->addr, entry->size);
+
             if (ret < 0) {
+                log_error("RECEIVE  at Read_exact ret = %d", ret);
                 return ret;
             }
 
@@ -475,7 +491,7 @@ int create_process_and_send_checkpoint(migrate_func_t migrate_func,
     memset(&cpstore, 0, sizeof(cpstore));
     cpstore.alloc = cp_alloc;
     cpstore.bound = CP_INIT_VMA_SIZE;
-
+    
     while (1) {
         /* try allocating checkpoint; if allocation fails, try with smaller sizes */
         cpstore.base = (uintptr_t)cp_alloc(0, cpstore.bound);
@@ -486,7 +502,7 @@ int create_process_and_send_checkpoint(migrate_func_t migrate_func,
         if (cpstore.bound < ALLOC_ALIGNMENT)
             break;
     }
-
+    log_error("TEJASWINEE checkpoint base=%zx , checkpoint bound= %lu", cpstore.base, cpstore.bound);
     if (!cpstore.base) {
         ret = -ENOMEM;
         log_error("failed allocating enough memory for checkpoint");
@@ -507,7 +523,7 @@ int create_process_and_send_checkpoint(migrate_func_t migrate_func,
         goto out;
     }
 
-    log_debug("checkpoint of %lu bytes created", cpstore.offset);
+    log_error("checkpoint of %lu bytes created", cpstore.offset);
 
     struct checkpoint_hdr hdr;
     memset(&hdr, 0, sizeof(hdr));
@@ -531,10 +547,10 @@ int create_process_and_send_checkpoint(migrate_func_t migrate_func,
         log_error("failed writing checkpoint header to child process (ret = %d)", ret);
         goto out;
     }
-
+    log_error("TEJASWINEE START send_checkpoint_on_stream ");
     ret = send_checkpoint_on_stream(pal_process, &cpstore);
     if (ret < 0) {
-        log_error("failed sending checkpoint (ret = %d)", ret);
+        log_error("WINEE failed sending checkpoint (ret = %d)", ret);
         goto out;
     }
 
@@ -644,6 +660,7 @@ int receive_checkpoint_and_restore(struct checkpoint_hdr* hdr) {
 
     ret = receive_memory_on_stream(g_pal_public_state->parent_process, hdr, (uintptr_t)base);
     if (ret < 0) {
+        log_error("RECEIVE receive_memory_on_stream ret = %d", ret);
         goto out_fail;
     }
     log_debug("restored memory from checkpoint");

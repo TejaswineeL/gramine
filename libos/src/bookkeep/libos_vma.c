@@ -1094,6 +1094,7 @@ static void dump_vma(struct libos_vma_info* vma_info, struct libos_vma* vma) {
     if (vma_info->file) {
         get_handle(vma_info->file);
     }
+    //log_error("READ vma_begin %p vma_end %zx vma_size %lu",vma_info->addr, vma->end, vma_info->length); 
     static_assert(sizeof(vma_info->comment) == sizeof(vma->comment), "Comments sizes do not match");
     memcpy(vma_info->comment, vma->comment, sizeof(vma_info->comment));
 }
@@ -1164,7 +1165,7 @@ static size_t dump_vmas_with_buf(struct libos_vma_info* infos, size_t max_count,
         }
         size++;
     }
-
+    // log_error("READ vma_begin %zx vms_end %zx", vma->begin, vma->end);
     spinlock_unlock(&vma_tree_lock);
 
     return size;
@@ -1173,7 +1174,7 @@ static size_t dump_vmas_with_buf(struct libos_vma_info* infos, size_t max_count,
 static int dump_vmas(struct libos_vma_info** ret_infos, size_t* ret_count,
                      uintptr_t begin, uintptr_t end,
                      bool (*vma_filter)(struct libos_vma* vma, void* arg), void* arg) {
-    size_t count = DEFAULT_VMA_COUNT;
+    size_t count = DEFAULT_VMA_COUNT; //64
 
     while (true) {
         struct libos_vma_info* vmas = calloc(count, sizeof(*vmas));
@@ -1183,6 +1184,7 @@ static int dump_vmas(struct libos_vma_info** ret_infos, size_t* ret_count,
 
         size_t needed_count = dump_vmas_with_buf(vmas, count, begin, end, vma_filter, arg);
         if (needed_count <= count) {
+            //log_error(" START needed_count %lu count %lu", needed_count,count);
             *ret_infos = vmas;
             *ret_count = needed_count;
             return 0;
@@ -1376,6 +1378,7 @@ BEGIN_CP_FUNC(vma) {
             if (!vma->file) {
                 /* Send anonymous memory region. */
                 struct libos_mem_entry* mem;
+                log_error("READ This one has anonymous memory region");
                 DO_CP_SIZE(memory, vma->addr, vma->length, &mem);
                 mem->prot = LINUX_PROT_TO_PAL(vma->prot, /*map_flags=*/0);
             } else {
@@ -1400,6 +1403,7 @@ BEGIN_CP_FUNC(vma) {
                  * the whole memory region to be inaccessible. */
                 if (send_size > 0) {
                     struct libos_mem_entry* mem;
+                    log_error("READ This one has file-backed memory region");
                     DO_CP_SIZE(memory, vma->addr, send_size, &mem);
                     mem->prot = LINUX_PROT_TO_PAL(vma->prot, /*map_flags=*/0);
                 }
@@ -1455,7 +1459,7 @@ BEGIN_CP_FUNC(all_vmas) {
     if (ret < 0) {
         return ret;
     }
-
+    log_error(" START addr %p length %lu",  vmas->addr, vmas->length);
     for (struct libos_vma_info* vma = &vmas[count - 1];; vma--) {
         DO_CP(vma, vma, NULL);
         if (vma == vmas)
