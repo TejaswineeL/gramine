@@ -60,7 +60,7 @@ static inline int create_process_handle(PAL_HANDLE* parent, PAL_HANDLE* child) {
     chdl->flags  |= PAL_HANDLE_FD_READABLE | PAL_HANDLE_FD_WRITABLE;
     chdl->process.stream      = fds[1];
     chdl->process.nonblocking = false;
-    log_error("JASWINEE parent_process_stream %d, child_process %d", fds[0], fds[1]);
+   // log_error("JASWINEE parent_process_stream %d, child_process %d", fds[0], fds[1]);
     *parent = phdl;
     *child  = chdl;
     ret = 0;
@@ -138,7 +138,7 @@ int _PalProcessCreate(PAL_HANDLE* handle, const char** args) {
         ret = -ENOMEM;
         goto out;
     }
-    log_error("JASWINEE total Parent data_size %lu", (sizeof(struct proc_args) + data_size));
+   // log_error("JASWINEE total Parent data_size %lu", (sizeof(struct proc_args) + data_size));
     proc_args->instance_id = g_pal_common_state.instance_id;
     proc_args->memory_quota = g_pal_linux_state.memory_quota;
 
@@ -271,7 +271,7 @@ static int64_t proc_read(PAL_HANDLE handle, uint64_t offset, uint64_t count, voi
         return -PAL_ERROR_INVAL;
 
     int64_t bytes = DO_SYSCALL(read, handle->process.stream, buffer, count);
-    log_error("RECEIVE_WINEE at linux proc_read  bytes %ld to be read %lu ", bytes, count);
+   // log_error("RECEIVE_WINEE at linux proc_read  bytes %ld to be read %lu ", bytes, count);
     if (bytes < 0)
         switch (bytes) {
             case -EWOULDBLOCK:
@@ -286,12 +286,12 @@ static int64_t proc_read(PAL_HANDLE handle, uint64_t offset, uint64_t count, voi
 }
 
 static int64_t proc_write(PAL_HANDLE handle, uint64_t offset, uint64_t count, const void* buffer) {
-    log_error("WINEE at linux proc_write secure_write buff ptr %p bytes %zu", buffer, count);
+  //  log_error("WINEE at linux proc_write secure_write buff ptr %p bytes %zu", buffer, count);
     if (offset)
         return -PAL_ERROR_INVAL;
 
     int64_t bytes = DO_SYSCALL(write, handle->process.stream, buffer, count);
-    log_error("WINEE at linux proc_write  bytes %ld", bytes);
+  //  log_error("WINEE at linux proc_write  bytes %ld", bytes);
     if (bytes < 0)
         switch (bytes) {
             case -EWOULDBLOCK:

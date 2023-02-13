@@ -114,7 +114,7 @@ long libos_syscall_socket(int family, int type, int protocol) {
     if (!handle) {
         return -ENOMEM;
     }
-
+    log_error("IOCTL_CALL SYSCALL SOCKET GOING TO CREATE");
     int ret = handle->info.sock.ops->create(handle);
     if (ret == 0) {
         ret = set_new_fd_handle(handle, is_cloexec ? FD_CLOEXEC : 0, NULL);
@@ -124,6 +124,7 @@ long libos_syscall_socket(int family, int type, int protocol) {
 }
 
 long libos_syscall_socketpair(int family, int type, int protocol, int* sv) {
+    log_error("IOCTL_CALL PAIR");
     if (family != AF_UNIX) {
         return -EAFNOSUPPORT;
     }
@@ -273,7 +274,7 @@ out:
 
 long libos_syscall_bind(int fd, void* addr, int _addrlen) {
     int ret;
-
+    log_error("IOCTL_CALL BIND");
     if (_addrlen < 0) {
         return -EINVAL;
     }
@@ -318,7 +319,7 @@ out:
 
 long libos_syscall_listen(int fd, int backlog) {
     int ret;
-
+    log_error("IOCTL_CALL LISTEN");
     if ((unsigned int)backlog > LIBOS_SOCK_MAX_PENDING_CONNS) {
         /* Linux kernel caps `backlog` this way. */
         backlog = LIBOS_SOCK_MAX_PENDING_CONNS;
@@ -451,16 +452,18 @@ out:
 }
 
 long libos_syscall_accept(int fd, void* addr, int* addrlen) {
+    log_error("IOCTL_CALL ACCEPT");
     return do_accept(fd, addr, addrlen, 0);
 }
 
 long libos_syscall_accept4(int fd, void* addr, int* addrlen, int flags) {
+    log_error("IOCTL_CALL ACCEPT4");
     return do_accept(fd, addr, addrlen, flags);
 }
 
 long libos_syscall_connect(int fd, void* addr, int _addrlen) {
     int ret;
-
+    log_error("IOCTL_CALL CONNECT");
     if (_addrlen < 0) {
         return -EINVAL;
     }
@@ -1044,6 +1047,7 @@ out:
 }
 
 long libos_syscall_shutdown(int fd, int how) {
+    log_error("IOCTL_CALL SHUTDOWN");
     struct libos_handle* handle = get_fd_handle(fd, NULL, NULL);
     if (!handle) {
         return -EBADF;

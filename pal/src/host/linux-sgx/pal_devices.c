@@ -948,7 +948,7 @@ static int get_allowed_ioctl_struct(uint32_t cmd, toml_array_t** out_toml_ioctl_
 
 int _PalDeviceIoControl(PAL_HANDLE handle, uint32_t cmd, unsigned long arg, int* out_ret) {
     int ret;
-
+    log_error("IOCTL_CALL inside LINUX-SGX _PalDeviceIoControl handle->hdr.type %d cmd %d arg %d", handle->hdr.type, cmd, arg);
     if (handle->hdr.type != PAL_TYPE_DEV)
         return -PAL_ERROR_INVAL;
 
@@ -1008,6 +1008,7 @@ int _PalDeviceIoControl(PAL_HANDLE handle, uint32_t cmd, unsigned long arg, int*
         goto out;
 
     int ioctl_ret = ocall_ioctl(handle->dev.fd, cmd, (unsigned long)untrusted_addr);
+    
     if (ioctl_ret < 0) {
         ret = unix_to_pal_error(ioctl_ret);
         goto out;

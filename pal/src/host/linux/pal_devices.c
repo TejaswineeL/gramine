@@ -9,7 +9,7 @@
  *       emulates lseek() completely in LibOS layer, thus seeking at PAL layer cannot be correctly
  *       implemented (without device-specific changes to LibOS layer).
  */
-
+#include <sys/socket.h>
 #include "api.h"
 #include "pal.h"
 #include "pal_error.h"
@@ -211,16 +211,43 @@ struct handle_ops g_dev_ops = {
 };
 
 int _PalDeviceIoControl(PAL_HANDLE handle, uint32_t cmd, unsigned long arg, int* out_ret) {
-    if (handle->hdr.type != PAL_TYPE_DEV)
+    log_error("IOCTL_CALL inside _PalDeviceIoControl ");
+
+    int sock = 0;
+    int ret=-1;
+    if(handle == NULL) {
+        log_error("IOCTL_CALL Handle=NULL calling Linux DO_SYSCALL Ioctl ");
+        sock = DO_SYSCALL(socket, AF_UNIX, SOCK_STREAM, 0);
+        ret=sock;
+        log_error("IOCTL_CALL return from Linux DO_SYSCALL Ioctl (ret = %d)", ret);
+        
+        if (sock < 0)
+            return sock;
+    }
+    else if(handle->hdr.type == PAL_TYPE_SOCKET) {
+        log_error("IOCTL_CALL  PAL_TYPE_SOCKET calling Linux DO_SYSCALL Ioctl ");
+        ret = DO_SYSCALL(ioctl, (handle? handle->sock.fd:(unsigned int)sock), cmd, arg);
+        log_error("IOCTL_CALL return from Linux DO_SYSCALL Ioctl (ret = %d)", ret);
+    }
+    else if(handle->hdr.type == PAL_TYPE_DEV) {
+        log_error("IOCTL_CALL  PAL_TYPE_dev calling Linux DO_SYSCALL Ioctl ");
+        if (handle->dev.fd == PAL_IDX_POISON)
+            return -PAL_ERROR_DENIED;
+
+        ret = DO_SYSCALL(ioctl, handle->dev.fd, cmd, arg);
+        log_error("IOCTL_CALL return from Linux DO_SYSCALL Ioctl (ret = %d)", ret);
+        if (ret < 0)
+            return unix_to_pal_error(ret);
+        *out_ret = ret;
+    }
+    else {
+        log_error("IOCTL_CALL Error Inval Linux DO_SYSCALL Ioctl");
         return -PAL_ERROR_INVAL;
-
-    if (handle->dev.fd == PAL_IDX_POISON)
-        return -PAL_ERROR_DENIED;
-
-    int ret = DO_SYSCALL(ioctl, handle->dev.fd, cmd, arg);
+    }
+    if (sock)
+        DO_SYSCALL(close, sock);
     if (ret < 0)
         return unix_to_pal_error(ret);
 
-    *out_ret = ret;
     return 0;
 }

@@ -48,7 +48,9 @@ long libos_syscall_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg) {
 
     if (is_host_dev) {
         int cmd_ret;
+        log_error("IOCTL_CALL calling  PalDeviceIoControl BEFORE SWITCH CASE handle_type %d, cmd %u, arg %lu", hdl->type, cmd, arg);
         ret = PalDeviceIoControl(hdl->pal_handle, cmd, arg, &cmd_ret);
+        log_error("IOCTL_CALL return from PalDeviceIoControl BEFORE SWITCH CASE (ret = %d)", ret);
         if (ret < 0) {
             ret = pal_to_unix_errno(ret);
             goto out;
@@ -156,13 +158,15 @@ long libos_syscall_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg) {
         case SIOCGIFHWADDR:
             if (hdl->type == TYPE_SOCK) {
                 /* LibOS doesn't know how to handle this IOCTL, forward it to the host */
-                int cmd_ret;
-                ret = PalDeviceIoControl(hdl->pal_handle, cmd, arg, &cmd_ret);
+                int out_ret;
+                log_error("IOCTL_CALL calling  PalDeviceIoControl  handle_type %d, cmd %u, arg %lu", hdl->type, cmd, arg);
+                ret = PalDeviceIoControl(hdl->pal_handle, cmd, arg, &out_ret);
+                log_error("IOCTL_CALL return from PalDeviceIoControl (ret = %d)", ret);
                 if (ret < 0)
                     ret = pal_to_unix_errno(ret);
                 else {
                     assert(ret == 0);
-                    ret = cmd_ret;
+                    ret = out_ret;
                 }
             }
             break;

@@ -266,6 +266,7 @@ static int64_t proc_read(PAL_HANDLE handle, uint64_t offset, uint64_t count, voi
 }
 
 static int64_t proc_write(PAL_HANDLE handle, uint64_t offset, uint64_t count, const void* buffer) {
+    //log_error("WINEE at linux-sgx proc_write secure_write");
     if (offset)
         return -PAL_ERROR_INVAL;
 
@@ -273,8 +274,10 @@ static int64_t proc_write(PAL_HANDLE handle, uint64_t offset, uint64_t count, co
     if (handle->process.ssl_ctx) {
         bytes = _PalStreamSecureWrite(handle->process.ssl_ctx, buffer, count,
                                       /*is_blocking=*/!handle->process.nonblocking);
+       // log_error("WINEE at proc_write secure_write");
     } else {
         bytes = ocall_write(handle->process.stream, buffer, count);
+        //log_error("WINEE at roc_write ocall_write");
         bytes = bytes < 0 ? unix_to_pal_error(bytes) : bytes;
     }
 

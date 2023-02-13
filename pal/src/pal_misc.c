@@ -31,6 +31,7 @@ size_t PalMemoryAvailableQuota(void) {
 }
 
 int PalDeviceIoControl(PAL_HANDLE handle, uint32_t cmd, unsigned long arg, int* out_ret) {
+    log_error("IOCTL_CALL pal_misc   cmd %u, arg %lu out_ret %p", cmd, arg, out_ret);
     return _PalDeviceIoControl(handle, cmd, arg, out_ret);
 }
 
