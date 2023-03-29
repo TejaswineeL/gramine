@@ -12,6 +12,7 @@
 #include "libos_process.h"
 #include "libos_signal.h"
 #include "libos_table.h"
+#include "socket_utils.h"
 #include "pal.h"
 
 static void signal_io(IDTYPE caller, void* arg) {
@@ -49,7 +50,9 @@ long libos_syscall_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg) {
                 ret = -EFAULT;
                 break;
             }
-            *(int*)arg = __atomic_load_n(&g_process.pgid, __ATOMIC_ACQUIRE);
+            lock(&g_process_id_lock);
+            *(int*)arg = g_process.pgid;
+            unlock(&g_process_id_lock);
             ret = 0;
             break;
         case FIONBIO:
@@ -129,6 +132,27 @@ long libos_syscall_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg) {
 
             *(int*)arg = size - offset;
             ret = 0;
+            break;
+        }
+        case SIOCGIFCONF:
+            /* fallthrough */
+        case SIOCGIFHWADDR:{
+            if (!is_user_memory_writable((void*)arg, sizeof(int))) {
+                ret = -EFAULT;
+                break;
+            }
+
+            struct libos_fs* fs = hdl->fs;
+            if (!fs || !fs->fs_ops) {
+                ret = -ENOTTY;
+                break;
+            }
+            log_debug("IOCTL_CALL inside libos_ioctl ");
+            if (fs->fs_ops->ioctl) {
+                ret = fs->fs_ops->ioctl(hdl, cmd, arg);
+            } else {
+                ret = -ENOSYS;
+            }
             break;
         }
         default:

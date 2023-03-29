@@ -131,3 +131,20 @@ struct linger {
 #define SHUT_RD 0
 #define SHUT_WR 1
 #define SHUT_RDWR 2
+
+#define IFNAMSIZ	16
+struct ifreq {
+    char ifr_name[IFNAMSIZ]; /* Interface name */
+    char ifr_ifru[24];
+};
+
+struct ifconf {
+    int               ifc_len; /* size of buffer */
+    union {
+        char         *ifc_buf; /* buffer address */
+        struct ifreq *ifc_req; /* array of structures */
+    };
+};
+
+#define SIOCGIFCONF   0x8912		/* get iface list		*/
+#define SIOCGIFHWADDR 0x8927		/* Get hardware address		*/
