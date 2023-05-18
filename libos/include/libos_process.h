@@ -15,6 +15,9 @@
 
 DEFINE_LIST(libos_child_process);
 DEFINE_LISTP(libos_child_process);
+
+extern struct libos_lock g_process_id_lock;
+
 struct libos_child_process {
     IDTYPE pid;
     IDTYPE vmid;
@@ -37,7 +40,11 @@ struct libos_process {
 
     /* This field should be accessed atomically, so no lock needed. */
     IDTYPE pgid;
-    /* This field should be accessed atomically, so no lock needed. */
+    /* Indicate whether the process has been attached to a process group. Protected by
+     * `g_process_id_lock`. */
+    bool attached_to_pg;
+    
+   /* Session ID. Protected by `g_process_id_lock`. */
     IDTYPE sid;
     /* Currently all threads share filesystem information. For more info check `CLONE_FS` flag in
      * `clone.c`. Protected by `fs_lock`. */

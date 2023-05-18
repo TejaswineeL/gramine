@@ -465,7 +465,7 @@ int proc_thread_stat_load(struct libos_dentry* dent, char** out_data, size_t* ou
     char* str = malloc(max);
     if (!str)
         return -ENOMEM;
-
+    lock(&g_process_id_lock);
     struct {
         const char* fmt;
         unsigned long val;
@@ -474,10 +474,10 @@ int proc_thread_stat_load(struct libos_dentry* dent, char** out_data, size_t* ou
         /* ppid */
         { " %d", g_process.ppid },
         /* pgrp */
-        { " %d", __atomic_load_n(&g_process.pgid, __ATOMIC_ACQUIRE) },
-        /* session */
-        { " %d", __atomic_load_n(&g_process.sid, __ATOMIC_ACQUIRE) },
-        /* tty_nr */
+        { " %d", g_process.pgid },
+	/* session */
+        { " %d", g_process.sid },
+       	/* tty_nr */
         { " %d", /*dummy value=*/0 },
         /* tpgid */
         { " %d", /*dummy value=*/0 },
@@ -580,7 +580,7 @@ int proc_thread_stat_load(struct libos_dentry* dent, char** out_data, size_t* ou
         /* exit_code */
         { " %d\n", /*dummy value=*/0 },
     };
-
+    unlock(&g_process_id_lock);
     size_t i = 0;
     while (i < ARRAY_SIZE(status)) {
         int ret;
