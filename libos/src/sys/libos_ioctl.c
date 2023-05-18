@@ -12,7 +12,9 @@
 #include "libos_table.h"
 #include "linux_abi/errors.h"
 #include "linux_abi/ioctl.h"
+#include "socket_utils.h"
 #include "pal.h"
+#include "stat.h"
 
 static void signal_io(IDTYPE caller, void* arg) {
     __UNUSED(caller);
@@ -30,6 +32,7 @@ static void signal_io(IDTYPE caller, void* arg) {
 }
 
 long libos_syscall_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg) {
+    int ret;
     struct libos_handle_map* handle_map = get_thread_handle_map(NULL);
     assert(handle_map);
 
@@ -37,7 +40,23 @@ long libos_syscall_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg) {
     if (!hdl)
         return -EBADF;
 
-    int ret;
+    lock(&g_dcache_lock);
+    bool is_host_dev = hdl->type == TYPE_CHROOT && hdl->dentry->inode &&
+        hdl->dentry->inode->type == S_IFCHR;
+    unlock(&g_dcache_lock);
+
+    if (is_host_dev) {
+        int cmd_ret;
+        ret = PalDeviceIoControl(hdl->pal_handle, cmd, arg, &cmd_ret);
+        if (ret < 0) {
+            ret = pal_to_unix_errno(ret);
+            goto out;
+        }
+
+        assert(ret == 0);
+        ret = cmd_ret;
+        goto out;
+    }
     switch (cmd) {
         case TIOCGPGRP:
             if (!hdl->uri || strcmp(hdl->uri, "dev:tty") != 0) {
@@ -131,11 +150,33 @@ long libos_syscall_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg) {
             ret = 0;
             break;
         }
+        case SIOCGIFCONF:
+            /* fallthrough */
+        case SIOCGIFHWADDR:{
+            if (!is_user_memory_writable((void*)arg, sizeof(int))) {
+                ret = -EFAULT;
+                break;
+            }
+
+            struct libos_fs* fs = hdl->fs;
+            if (!fs || !fs->fs_ops) {
+                ret = -ENOTTY;
+                break;
+            }
+
+            if (fs->fs_ops->ioctl) {
+                ret = fs->fs_ops->ioctl(hdl, cmd, arg);
+            } else {
+                ret = -ENOSYS;
+            }
+            break;
+        }
         default:
             ret = -ENOSYS;
             break;
     }
 
+out:
     put_handle(hdl);
     if (ret == -EINTR) {
         ret = -ERESTARTSYS;

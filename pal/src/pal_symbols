@@ -27,6 +27,7 @@ PalSocketAccept
 PalSocketConnect
 PalSocketSend
 PalSocketRecv
+PalSocketIoControl
 PalSendHandle
 PalReceiveHandle
 PalStreamWaitForClient
@@ -43,6 +44,7 @@ PalSegmentBaseGet
 PalSegmentBaseSet
 PalStreamChangeName
 PalStreamAttributesSetByHandle
+PalDeviceIoControl
 PalDebugMapAdd
 PalDebugMapRemove
 PalDebugDescribeLocation

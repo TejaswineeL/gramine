@@ -264,6 +264,8 @@ Socket handling
 .. doxygenfunction:: PalSocketRecv
    :project: pal
 
+.. doxygenfunction:: PalSocketIoControl
+   :project: pal
 
 Thread creation
 ^^^^^^^^^^^^^^^

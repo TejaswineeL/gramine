@@ -156,6 +156,7 @@ noreturn void pal_main(uint64_t instance_id, PAL_HANDLE parent_process, PAL_HAND
 /* For initialization */
 
 unsigned long _PalMemoryQuota(void);
+int _PalDeviceIoControl(PAL_HANDLE handle, uint32_t cmd, unsigned long arg, int* out_ret);
 // Returns 0 on success, negative PAL code on failure
 int _PalGetCPUInfo(struct pal_cpu_info* info);
 
@@ -188,7 +189,7 @@ int _PalSocketSend(PAL_HANDLE handle, struct iovec* iov, size_t iov_len, size_t*
                    struct pal_socket_addr* addr, bool force_nonblocking);
 int _PalSocketRecv(PAL_HANDLE handle, struct iovec* iov, size_t iov_len, size_t* out_total_size,
                    struct pal_socket_addr* addr, bool force_nonblocking);
-
+int _PalSocketIoControl(PAL_HANDLE handle, uint32_t cmd, unsigned long arg, int* out_ret);
 /* PalProcess and PalThread calls */
 int _PalThreadCreate(PAL_HANDLE* handle, int (*callback)(void*), void* param);
 noreturn void _PalThreadExit(int* clear_child_tid);
