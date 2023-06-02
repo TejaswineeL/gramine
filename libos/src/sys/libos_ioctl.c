@@ -5,6 +5,7 @@
  * Implementation of system call "ioctl".
  */
 
+#include <sys/ioctl.h>
 #include "libos_handle.h"
 #include "libos_internal.h"
 #include "libos_process.h"
@@ -149,6 +150,25 @@ long libos_syscall_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg) {
 
             *(int*)arg = size - offset;
             ret = 0;
+            break;
+        }
+        case SIOCGIFCONF:
+        case SIOCGIFHWADDR:{
+            log_error("ioctl: recognised SIOCGIFCONF");
+            if (hdl->type == TYPE_SOCK) {
+                log_error("ioctl: recognised TYPE_SOCK");
+                PAL_HANDLE pal_handle = __atomic_load_n(&hdl->info.sock.pal_handle, __ATOMIC_ACQUIRE);
+                if (!pal_handle) {
+                    log_error("ioctl: Invalid PAL Handle");
+                    return -EINVAL;
+                }
+
+                int cmd_ret;
+                log_error("ioctl: going to PalDeviceIoControl");
+                ret = PalDeviceIoControl(pal_handle, cmd, arg, &cmd_ret);
+                if (ret < 0)
+                    ret = pal_to_unix_errno(ret);
+            }
             break;
         }
         default:

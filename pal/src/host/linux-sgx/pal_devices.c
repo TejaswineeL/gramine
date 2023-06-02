@@ -985,23 +985,40 @@ static int get_allowed_ioctl_struct(uint32_t cmd, toml_array_t** out_toml_ioctl_
 
 int _PalDeviceIoControl(PAL_HANDLE handle, uint32_t cmd, unsigned long arg, int* out_ret) {
     int ret;
-
-    if (handle->hdr.type != PAL_TYPE_DEV)
-        return -PAL_ERROR_INVAL;
-
-    if (handle->dev.fd == PAL_IDX_POISON)
-        return -PAL_ERROR_DENIED;
-
+    log_error("ioctl: at _PalDeviceIoControl");
     toml_array_t* toml_ioctl_struct = NULL;
-    ret = get_allowed_ioctl_struct(cmd, &toml_ioctl_struct);
-    if (ret < 0)
-        return ret;
+    if (handle->hdr.type == PAL_TYPE_DEV){
 
-    if (!toml_ioctl_struct) {
-        /* special case of "no struct needed for IOCTL" -> base-type or ignored IOCTL argument */
-        *out_ret = ocall_ioctl(handle->dev.fd, cmd, arg);
-        return 0;
+        if (handle->dev.fd == PAL_IDX_POISON)
+            return -PAL_ERROR_DENIED;
+
+        ret = get_allowed_ioctl_struct(cmd, &toml_ioctl_struct);
+        if (ret < 0)
+            return ret;
+
+        if (!toml_ioctl_struct) {
+            /* special case of "no struct needed for IOCTL" -> base-type or ignored IOCTL argument */
+            *out_ret = ocall_ioctl(handle->dev.fd, cmd, arg);
+            return 0;
+        }
     }
+    else if(handle->hdr.type == PAL_TYPE_SOCKET){
+        log_error("ioctl: got PAL_TYPE_SOCKET");
+        if (handle->sock.fd == PAL_IDX_POISON)
+            return -PAL_ERROR_DENIED;
+
+        ret = get_allowed_ioctl_struct(cmd, &toml_ioctl_struct);
+        if (ret < 0)
+            return ret;
+
+        if (!toml_ioctl_struct) {
+            /* special case of "no struct needed for IOCTL" -> base-type or ignored IOCTL argument */
+            *out_ret = ocall_ioctl(handle->sock.fd, cmd, arg);
+            return 0;
+        }
+    }
+    else
+        return -PAL_ERROR_INVAL;
 
     void* untrusted_addr = NULL;
     size_t untrusted_size = 0;
@@ -1042,7 +1059,11 @@ int _PalDeviceIoControl(PAL_HANDLE handle, uint32_t cmd, unsigned long arg, int*
     if (ret < 0)
         goto out;
 
-    int ioctl_ret = ocall_ioctl(handle->dev.fd, cmd, (unsigned long)untrusted_addr);
+    int ioctl_ret;
+    if(handle->hdr.type == PAL_TYPE_DEV)
+        ioctl_ret = ocall_ioctl(handle->dev.fd, cmd, (unsigned long)untrusted_addr);
+    else
+        ioctl_ret = ocall_ioctl(handle->sock.fd, cmd, (unsigned long)untrusted_addr);
 
     ret = copy_sub_regions_to_enclave(sub_regions, sub_regions_cnt);
     if (ret < 0)
