@@ -9,7 +9,8 @@
  *       emulates lseek() completely in LibOS layer, thus seeking at PAL layer cannot be correctly
  *       implemented (without device-specific changes to LibOS layer).
  */
-
+#include <sys/ioctl.h>
+#include <net/if.h>
 #include "api.h"
 #include "pal.h"
 #include "pal_error.h"
