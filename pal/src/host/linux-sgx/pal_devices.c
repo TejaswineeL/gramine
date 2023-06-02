@@ -1051,21 +1051,27 @@ int _PalDeviceIoControl(PAL_HANDLE handle, uint32_t cmd, unsigned long arg, int*
                                PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, /*fd=*/-1,
                                /*offset=*/0);
     if (ret < 0) {
+        log_error("ioctl: ret %d ocall_mmap_untrusted", ret);
         ret = unix_to_pal_error(ret);
         goto out;
     }
 
     assert(untrusted_addr);
     ret = copy_sub_regions_to_untrusted(sub_regions, sub_regions_cnt, untrusted_addr);
-    if (ret < 0)
+    if (ret < 0){
+        log_error("ioctl: ret %d copy_sub_regions_to_untrusted", ret);
         goto out;
+    }
 
     int ioctl_ret;
-    if(handle->hdr.type == PAL_TYPE_DEV)
+    if(handle->hdr.type == PAL_TYPE_DEV){
+        log_error("ioctl: ocall_ioctl PAL_TYPE_DEV");
         ioctl_ret = ocall_ioctl(handle->dev.fd, cmd, (unsigned long)untrusted_addr);
-    else
+    }
+    else{
+        log_error("ioctl: ocall_ioctl PAL_TYPE_socket");
         ioctl_ret = ocall_ioctl(handle->sock.fd, cmd, (unsigned long)untrusted_addr);
-
+    }
     ret = copy_sub_regions_to_enclave(sub_regions, sub_regions_cnt);
     if (ret < 0)
         goto out;

@@ -154,7 +154,7 @@ long libos_syscall_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg) {
         }
         case SIOCGIFCONF:
         case SIOCGIFHWADDR:{
-            log_error("ioctl: recognised SIOCGIFCONF");
+            log_error("ioctl: recognised sock_ioctl %d", cmd);
             if (hdl->type == TYPE_SOCK) {
                 log_error("ioctl: recognised TYPE_SOCK");
                 PAL_HANDLE pal_handle = __atomic_load_n(&hdl->info.sock.pal_handle, __ATOMIC_ACQUIRE);
