@@ -19,6 +19,9 @@
 
 #define BUF_SIZE (64 * 1024) /* read/write in 64KB chunks for sendfile() */
 
+static int sendfile_syscall_count = 0; /* A variable to count the number of sendfile syscalls */
+char* buf = NULL; /* Globally declared buffer allocated to store the data used by sendfile syscall  */
+
 /* The kernel would look up the parent directory, and remove the child from the inode. But we are
  * working with the PAL, so we open the file, truncate and close it. */
 long libos_syscall_unlink(const char* file) {
@@ -410,7 +413,6 @@ out:
 
 long libos_syscall_sendfile(int out_fd, int in_fd, off_t* offset, size_t count) {
     long ret;
-    char* buf = NULL;
 
     size_t read_from_in  = 0;
     size_t copied_to_out = 0;
@@ -442,7 +444,13 @@ long libos_syscall_sendfile(int out_fd, int in_fd, off_t* offset, size_t count) 
     /* FIXME: This sendfile() emulation is very simple and not particularly efficient: it reads from
      *        input FD in BUF_SIZE chunks and writes into output FD. Mmap-based emulation may be
      *        more efficient but adds complexity (not all handle types provide mmap callback). */
-    buf = malloc(BUF_SIZE);
+
+    if (!sendfile_syscall_count) {
+        /* Instead of allocating a memory block Repetitively on every sendfile syscall, allocate the block once and reuse it */
+        buf = malloc(BUF_SIZE);
+        ++sendfile_syscall_count;
+    }
+
     if (!buf) {
         ret = -ENOMEM;
         goto out;
@@ -533,7 +541,6 @@ out_update:
     }
 
 out:
-    free(buf);
     put_handle(in_hdl);
     put_handle(out_hdl);
     return copied_to_out ? (long)copied_to_out : ret;
