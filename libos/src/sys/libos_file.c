@@ -410,7 +410,6 @@ out:
 
 long libos_syscall_sendfile(int out_fd, int in_fd, off_t* offset, size_t count) {
     long ret;
-    char* buf = NULL;
 
     size_t read_from_in  = 0;
     size_t copied_to_out = 0;
@@ -442,8 +441,10 @@ long libos_syscall_sendfile(int out_fd, int in_fd, off_t* offset, size_t count) 
     /* FIXME: This sendfile() emulation is very simple and not particularly efficient: it reads from
      *        input FD in BUF_SIZE chunks and writes into output FD. Mmap-based emulation may be
      *        more efficient but adds complexity (not all handle types provide mmap callback). */
-    buf = malloc(BUF_SIZE);
-    if (!buf) {
+    if(!in_hdl->buf) {
+        in_hdl->buf = malloc(BUF_SIZE);
+    }
+    if (!in_hdl->buf) {
         ret = -ENOMEM;
         goto out;
     }
@@ -485,7 +486,7 @@ long libos_syscall_sendfile(int out_fd, int in_fd, off_t* offset, size_t count) 
     while (copied_to_out < count) {
         size_t to_copy = count - copied_to_out > BUF_SIZE ? BUF_SIZE : count - copied_to_out;
 
-        ssize_t x = in_hdl->fs->fs_ops->read(in_hdl, buf, to_copy, &pos_in);
+        ssize_t x = in_hdl->fs->fs_ops->read(in_hdl, in_hdl->buf, to_copy, &pos_in);
         if (x < 0) {
             ret = x;
             goto out_update;
@@ -500,7 +501,7 @@ long libos_syscall_sendfile(int out_fd, int in_fd, off_t* offset, size_t count) 
         }
 
         lock(&out_hdl->pos_lock);
-        ssize_t y = out_hdl->fs->fs_ops->write(out_hdl, buf, x, &out_hdl->pos);
+        ssize_t y = out_hdl->fs->fs_ops->write(out_hdl, in_hdl->buf, x, &out_hdl->pos);
         unlock(&out_hdl->pos_lock);
         if (y < 0) {
             ret = y;
@@ -533,7 +534,6 @@ out_update:
     }
 
 out:
-    free(buf);
     put_handle(in_hdl);
     put_handle(out_hdl);
     return copied_to_out ? (long)copied_to_out : ret;

@@ -215,6 +215,7 @@ struct libos_handle {
      * `read`, `seek` but not `pread`). This lock should be taken *before* `libos_handle.lock` and
      * `libos_inode.lock`. */
     struct libos_lock pos_lock;
+    char* buf;
 };
 
 /* allocating / manage handle */

@@ -534,6 +534,10 @@ void put_handle(struct libos_handle* hdl) {
         if (hdl->inode)
             put_inode(hdl->inode);
 
+	if (hdl->buf) {
+            free(hdl->buf);
+        }
+
         destroy_handle(hdl);
     }
 }
