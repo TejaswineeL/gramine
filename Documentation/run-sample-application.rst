@@ -4,7 +4,7 @@ Run a sample application
 .. highlight:: sh
 
 To run an application with Gramine, the host platform must be correctly set up first.
-Please refer:doc:`Set up the host environment<sgx-setup>` for the host environment
+Please refer :doc:`Set up the host environment<sgx-setup>` for the host environment
 set up.
 
 The core Gramine repository contains sample applications to test the Gramine
