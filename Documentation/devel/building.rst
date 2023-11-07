@@ -107,8 +107,8 @@ Additional information, package descriptions, etc. can be found in the official
 3. Install dependencies for DCAP
 """"""""""""""""""""""""""""""""
 
-If you plan on enabling ``-Ddcap`` option, you need to install
-``libsgx-dcap-quote-verify`` package (and its development counterpart)::
+If you plan on enabling ``-Ddcap`` option (see :term:`DCAP`), you need to install
+``libsgx-dcap-quote-verify`` package ::
 
    # Below commands work on Ubuntu 22.04 LTS and 20.04 LTS
    sudo curl -fsSLo /usr/share/keyrings/intel-sgx-deb.asc https://download.01.org/intel-sgx/sgx_repo/ubuntu/intel-sgx-deb.key
