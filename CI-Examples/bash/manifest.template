@@ -1,27 +1,105 @@
 # This is a general manifest template for running Bash and core utility programs,
 # including ls, cat, cp, date, and rm.
+sgx.nonpie_binary = true
+sgx.enclave_size = "32G"
+sgx.max_threads = 32
+sys.enable_extra_runtime_domain_names_conf = true
+sgx.insecure__enable_shared_range = "true"
+sgx.file_check_policy = "allow_all_but_log"
+loader.pal_internal_mem_size = "256M"
+loader.log_level = "error"
+loader.env.OMP_NUM_THREADS = "8"
+sys.stack.size = "2M"
+loader.insecure__use_cmdline_argv = true
+loader.env.PYTHONIOENCODING = "utf-8"
+loader.insecure_disable_aslr = true
+sgx.allow_file_creation = true
+sgx.static_address = 1
+loader.env.M_ARENA_MAX = "1"
+loader.env.JAVA_OPTS = "'-Djava.library.path=/usr/lib/jvm/java-1.8.0-openjdk-amd64/lib -Dsun.boot.library.path=/usr/lib/jvm/java-1.8.0-openjdk-amd64/lib'"
+loader.env.SPARK_MASTER_OPTS = "'-Dspark.worker.timeout=60'"
+loader.env.SPARK_USER = "root"
+loader.env.SPARK_SCALA_VERSION = "2.12"
+loader.env.OS_ARCH = "amd64"
+loader.env.OS_FLAVOUR = "debian-11"
+loader.env.OS_NAME = "linux"
+loader.env.APP_VERSION = "3.3.1"
+loader.env.BITNAMI_APP_NAME = "spark"
+loader.env.JAVA_HOME = "/usr/lib/jvm/java-1.8.0-openjdk-amd64:/lib/jvm/java-8-openjdk-amd64/lib/amd64/jli"
+loader.env.LIBNSS_WRAPPER_PATH = "/usr/lib/libnss_wrapper.so"
+loader.env.NSS_WRAPPER_GROUP = "/tmp/nss_group"
+loader.env.NSS_WRAPPER_PASSWD = "/tmp/nss_passwd"
+loader.env.PYTHONPATH = "/usr/local/lib/python3.8:/usr/lib/python3:/usr/local/lib/python3.8/dist-packages:/usr/lib/python3/dist-packages:/usr/lib/python3.8/lib-dynload:/usr/local/lib/python3.8/lib-dynload:/usr/lib/python3.8/distutils"
+loader.env.PATH = "/usr/local/bin/python3.8:/usr/sbin:/usr/bin:/usr/bin/java:{{ execdir }}"
+loader.env.SPARK_HOME = "/opt/spark_3.3.1/spark-3.3.1-bin-hadoop3"
 
 loader.entrypoint = "file:{{ gramine.libos }}"
 libos.entrypoint = "{{ execdir }}/bash"
 
-loader.log_level = "{{ log_level }}"
 
-loader.env.LD_LIBRARY_PATH = "/lib:{{ arch_libdir }}:/usr{{ arch_libdir }}"
-loader.env.PATH = "{{ execdir }}"
+loader.env.LD_LIBRARY_PATH = "/lib:{{ arch_libdir }}:/usr{{ arch_libdir }}:/usr/local/lib/x86_64-linux-gnu/gramine/runtime/glibc:/usr/lib/x86_64-linux-gnu/gramine/runtime/glibc:/lib/jvm/java-8-openjdk-amd64/lib/amd64/jli/libjli.so:/usr/lib/jvm/java-1.8.0-openjdk-amd64/bin:/usr/lib/python3.8/lib-dynload:/usr/local/lib/python3.8:/usr/lib/python3.8/lib2to3"
 
-loader.insecure__use_cmdline_argv = true
+sys.ioctl_structs.ifconf = [
+  # When ifc_req is NULL, direction of ifc_len is out. Otherwise, direction is in.
+  { size = 4, direction = "inout", name = "ifc_len" },  # ifc_len
+  { size = 4, direction = "none" },                     # padding
+  { ptr = [ { size = "ifc_len", direction = "in" } ] }, # ifc_req
+]
 
+sys.ioctl_structs.ifreq = [
+  { size = 16, direction = "out" }, # ifr_name
+  { size = 24, direction = "in" },  # ifr_hwaddr
+]
+
+sys.ioctl_structs.if_flags = [
+  { size = 64, direction = "out" },
+  { size = 64, direction = "in" },
+]
+sys.ioctl_structs.if_netmask = [
+  { size = 64, direction = "out" },
+  { size = 64, direction = "in" },
+]
+sys.ioctl_structs.if_ifindex = [
+  { size = 64, direction = "out" },
+  { size = 64, direction = "in" },
+]
+sys.ioctl_structs.if_braddr = [
+  { size = 64, direction = "out" },
+  { size = 64, direction = "in" },
+]
+sys.allowed_ioctls = [
+  { request_code = 0x8912, struct = "ifconf" }, # SIOCGIFCONF
+  { request_code = 0x8927, struct = "ifreq" },  # SIOCGIFHWADDR
+  { request_code = 0x8913, struct = "if_flags" },
+  { request_code = 0x8933, struct = "if_ifindex" },
+  { request_code = 0x891b, struct = "if_netmask" },
+  { request_code = 0x8919, struct = "if_braddr" },
+]
+#loader.env.SPARK_SCALA_VERSION="2.12"
+sys.enable_sigterm_injection = true
 fs.mounts = [
   { path = "/lib", uri = "file:{{ gramine.runtimedir() }}" },
   { path = "{{ arch_libdir }}", uri = "file:{{ arch_libdir }}" },
   { path = "/usr/lib", uri = "file:/usr/lib" },
   { path = "{{ execdir }}", uri = "file:{{ execdir }}" },
+#  { path = "/tmp", uri = "file:/tmp" },
+  { type = "tmpfs", path = "/tmp" },
+  { path = "/bin", uri = "file:/bin" },
+  { path = "/usr", uri = "file:/usr" },
+  { path = "/opt/spark_3.3.1/spark-3.3.1-bin-hadoop3", uri = "file:/opt/spark_3.3.1/spark-3.3.1-bin-hadoop3" },
+#  { path = "/opt/spark_3.3.1/spark-3.3.2-bin-hadoop3", uri = "file:/opt/spark_3.3.1/spark-3.3.2-bin-hadoop3" },
+  { path = "/root", uri = "file:/root" },
+  { path = "/home/user/.local", uri = "file:{{ env.HOME }}/.local" },
+  { path = "/etc", uri = "file:/etc"},
+#  { path = "/proc", uri = "file:/proc"}, 
+#  { path = "/var", uri = "file:/var" },
+#  { path = "/sbin", uri = "file:/sbin" },
 ]
 
 sgx.debug = true
 sgx.edmm_enable = {{ 'true' if env.get('EDMM', '0') == '1' else 'false' }}
-sgx.enclave_size = "512M"
-sgx.max_threads = 4
+#sgx.enclave_size = "512M"
+#sgx.max_threads = 4
 
 sgx.trusted_files = [
   "file:{{ gramine.libos }}",
@@ -29,8 +107,21 @@ sgx.trusted_files = [
   "file:{{ gramine.runtimedir() }}/",
   "file:{{ arch_libdir }}/",
   "file:/usr/{{ arch_libdir }}/",
+  "file:/etc/",
+  "file:/usr/",
+  "file:/bin/",
+#  "file:/proc/",
 ]
 
 sgx.allowed_files = [
+  "file:/etc/",
   "file:scripts/",
+  "file:/tmp/",
+  "file:/proc/",
+  "file:/lib/",
+  "file:/lib64/",
+  "file:/sbin/",
+  "file:/sys/",
+  "file:/usr/",
+  "file:/var/",
 ]
