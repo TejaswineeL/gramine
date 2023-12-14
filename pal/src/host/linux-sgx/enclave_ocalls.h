@@ -63,7 +63,8 @@ int ocall_accept(int sockfd, struct sockaddr* addr, size_t* addrlen, struct sock
 int ocall_connect(int domain, int type, int protocol, int ipv6_v6only, const struct sockaddr* addr,
                   size_t addrlen, struct sockaddr* bind_addr, size_t* bind_addrlen);
 
-int ocall_connect_simple(int fd, struct sockaddr_storage* addr, size_t* addrlen);
+int ocall_connect_simple(int fd, bool nonblocking, struct sockaddr_storage* addr, size_t* addrlen,
+                         bool* out_inprogress);
 
 ssize_t ocall_recv(int sockfd, struct iovec* buf, size_t iov_len, void* addr, size_t* addrlenptr,
                    void* control, size_t* controllenptr, unsigned int flags);
@@ -81,7 +82,7 @@ int ocall_sched_setaffinity(void* tcs, unsigned long* cpu_mask, size_t cpu_mask_
 
 int ocall_sched_getaffinity(void* tcs, unsigned long* cpu_mask, size_t cpu_mask_len);
 
-int ocall_clone_thread(void);
+int ocall_clone_thread(void* dynamic_tcs);
 
 int ocall_create_process(size_t nargs, const char** args, uintptr_t (*reserved_mem_ranges)[2],
                          size_t reserved_mem_ranges_len, int* out_stream_fd);

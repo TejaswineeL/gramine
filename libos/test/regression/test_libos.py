@@ -1264,8 +1264,6 @@ class TC_50_GDB(RegressionTestCase):
         return match.group(1).strip()
 
     def test_000_gdb_backtrace(self):
-        # pylint: disable=fixme
-        #
         # To run this test manually, use:
         # GDB=1 GDB_SCRIPT=debug.gdb gramine-{direct|sgx} debug
         #
@@ -1410,6 +1408,26 @@ class TC_80_Socket(RegressionTestCase):
     def test_301_socket_tcp_ancillary(self):
         stdout, _ = self.run_binary(['tcp_ancillary'])
         self.assertIn('TEST OK', stdout)
+
+    # Two tests for a responsive peer: first connect() returns EINPROGRESS, then poll/epoll
+    # immediately returns because the connection is quickly refused
+    def test_305_socket_tcp_einprogress_responsive_poll(self):
+        stdout, _ = self.run_binary(['tcp_einprogress', '127.0.0.1', 'poll'])
+        self.assertIn('TEST OK (connection refused after initial EINPROGRESS)', stdout)
+
+    def test_306_socket_tcp_einprogress_responsive_epoll(self):
+        stdout, _ = self.run_binary(['tcp_einprogress', '127.0.0.1', 'epoll'])
+        self.assertIn('TEST OK (connection refused after initial EINPROGRESS)', stdout)
+
+    # Two tests for an unresponsive peer: first connect() returns EINPROGRESS, then poll/epoll
+    # times out because the connection cannot be established
+    def test_307_socket_tcp_einprogress_unresponsive_poll(self):
+        stdout, _ = self.run_binary(['tcp_einprogress', '10.255.255.255', 'poll'])
+        self.assertIn('TEST OK (connection timed out)', stdout)
+
+    def test_308_socket_tcp_einprogress_unresponsive_epoll(self):
+        stdout, _ = self.run_binary(['tcp_einprogress', '10.255.255.255', 'epoll'])
+        self.assertIn('TEST OK (connection timed out)', stdout)
 
     def test_310_socket_tcp_ipv6_v6only(self):
         stdout, _ = self.run_binary(['tcp_ipv6_v6only'], timeout=50)

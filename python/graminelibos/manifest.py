@@ -3,14 +3,18 @@
 # Copyright (C) 2022 Intel Corporation
 #                    Michał Kowalczyk <mkow@invisiblethingslab.com>
 #                    Borys Popławski <borysp@invisiblethingslab.com>
+# Copyright (C) 2023 Intel Corporation
+#                    Wojtek Porczyk <woju@invisiblethingslab.com>
 
 """
 Gramine manifest management and rendering
 """
 
+import errno
 import hashlib
 import os
 import pathlib
+import posixpath
 
 import tomli
 import tomli_w
@@ -27,51 +31,259 @@ class ManifestError(Exception):
     Contains a string with error description.
     """
 
-def hash_file_contents(path):
-    with open(path, 'rb') as f:
-        sha = hashlib.sha256()
-        for chunk in iter(lambda: f.read(128 * sha.block_size), b''):
-            sha.update(chunk)
-        return sha.hexdigest()
-
 def uri2path(uri):
     if not uri.startswith('file:'):
         raise ManifestError(f'Unsupported URI type: {uri}')
     return pathlib.Path(uri[len('file:'):])
 
-def append_tf(trusted_files, path, hash_=None):
-    if path not in trusted_files:
-        trusted_files[path] = hash_ if hash_ is not None else hash_file_contents(path)
 
-def append_trusted_dir_or_file(trusted_files, val, expanded):
-    if isinstance(val, dict):
-        uri = val['uri']
-        if val.get('sha256'):
-            append_tf(trusted_files, uri2path(uri), val['sha256'])
-            return
-    elif isinstance(val, str):
-        uri = val
-    else:
-        raise ManifestError(f'Unknown trusted file format: {val!r}')
+# loosely based on posixpath._joinrealpath
+def resolve_symlinks(path, *, chroot, seen=None):
+    """Resolve symlink inside chroot
 
-    path = uri2path(uri)
-    if not path.exists():
-        raise ManifestError(f'Cannot resolve {path}')
-    if path.is_dir():
-        if not uri.endswith('/'):
-            raise ManifestError(f'Directory URI ({uri}) does not end with "/"')
+    Args:
+        path (pathlib.Path or str): the path to resolve
+        chroot (pathlib.Path): path to chroot
 
-        expanded.append(path)
-        for sub_path in sorted(path.rglob('*')):
-            expanded.append(sub_path)
-            if sub_path.is_file():
-                # Skip inaccessible files
-                if os.access(sub_path, os.R_OK):
-                    append_tf(trusted_files, sub_path)
-    else:
-        assert path.is_file()
-        append_tf(trusted_files, path)
-        expanded.append(path)
+    Raises:
+        OSError: When resolution fails. The following variants can be raised: ``ENOTDIR`` aka
+            :py:class:`NotADirectoryError` for paths like ``a/b/file/c``; ``ELOOP`` for loops.
+    """
+    path = pathlib.Path(path)
+    if not path.is_absolute():
+        raise ManifestError('only absolute paths can be measured in chroot')
+
+    if seen is None:
+        # a mapping of linksrc -> linkdest (all within chroot), but linkdest values can be None
+        # while recursing, and if None is encountered, then we'll know we have a loop
+        seen = {}
+
+    # Current state (what we already resolved). This is a path that is:
+    # - an instance of pathlib.Path;
+    # - absolute (starts with '/');
+    # - already resolved path (contains no symlinks);
+    # - inside chroot (outer_current_path is this path as seen from outside).
+    # Therefore it's safe to traverse '..' in inner_current_path by just taking .parent attribute.
+    inner_current_path = pathlib.Path('/')
+    outer_current_path = chroot / inner_current_path.relative_to('/')
+
+    for part in path.relative_to('/').parts:
+        if not outer_current_path.is_dir():
+            raise NotADirectoryError(errno.ENOTDIR, os.strerror(errno.ENOTDIR), inner_current_path)
+
+        if part == posixpath.curdir: # '.'
+            continue
+
+        if part == posixpath.pardir: # '..'
+            inner_current_path = inner_current_path.parent # this works also for /, just returns /
+            outer_current_path = chroot / inner_current_path.relative_to('/')
+            continue
+
+        inner_current_path /= part
+        outer_current_path = chroot / inner_current_path.relative_to('/')
+
+        if not outer_current_path.is_symlink():
+            continue
+
+        # else: here's the hard part, symlink resolution
+
+        if inner_current_path not in seen:
+            seen[inner_current_path] = None
+            # TODO after python >= 3.9: use Path.readlink()
+            next_path = pathlib.Path(os.readlink(outer_current_path))
+
+            # XXX(woju 12.12.2023): The following path concatenation is suboptimal, it will cause
+            # the recurring function to traverse and stat() all parts of inner_current_path again,
+            # so it's easy to construct exploding O(n²) tree. However, to write this optimally, it
+            # would require to complicate already convoluted logic. Trees that would trigger
+            # suboptimal complexity are uncommon, so I think it's a reasonable tradeoff.
+            if not next_path.is_absolute():
+                next_path = inner_current_path.parent / next_path
+
+            seen[inner_current_path] = resolve_symlinks(next_path, chroot=chroot, seen=seen)
+
+        if seen[inner_current_path] is None:
+            # we have a loop in symlinks
+            raise OSError(errno.ELOOP, os.strerror(errno.ELOOP), inner_current_path)
+
+        inner_current_path = seen[inner_current_path]
+        outer_current_path = chroot / inner_current_path.relative_to('/')
+        continue
+
+    return inner_current_path
+
+
+class TrustedFile:
+    """Represents a single entry in sgx.trusted_files.
+
+    Args:
+        uri (str): URI
+        sha256 (str or None): sha256
+        chroot (pathlib.Path or None): optional path to chroot, if being measured in chroot dir
+
+    Raises:
+        graminelibos.ManifestError: on invalid URI values, or when *chroot* is not None and realpath
+            is not absolute
+    """
+    def __init__(self, uri, sha256=None, *, chroot=None):
+        #: URI of the trusted file
+        self.uri = uri
+        #: sha256 of the trusted file as str of hex digits, or None if not measured
+        self.sha256 = sha256
+        #: optional chroot, if the file is to be measured in a subdirectory
+        self.chroot = pathlib.Path(chroot) if chroot is not None else chroot
+
+        #: real path to the file on disk, including chroot path if specified
+        self.realpath = None
+
+        path = pathlib.PurePosixPath(uri2path(uri))
+
+        if self.chroot is None:
+            self.realpath = pathlib.Path(path)
+        else:
+            self.realpath = chroot / resolve_symlinks(path, chroot=self.chroot).relative_to('/')
+
+    @classmethod
+    def from_manifest(cls, data, *, chroot=None):
+        """Create an instance from an entry in manifest.
+
+        Args:
+            data (str or dict): what is found in manifest data
+            chroot (pathlib.Path or None): optional path to chroot, if being measured in chroot dir
+
+        Returns:
+            TrustedFile: a single instance of TrustedFile
+
+        Raises:
+            graminelibos.ManifestError: on errors in data
+        """
+        if isinstance(data, str):
+            uri, sha256 = data, None
+
+        elif isinstance(data, dict):
+            uri, sha256 = data.pop('uri'), data.pop('sha256', None)
+            if data:
+                # there are some unknown keys left after two .pop()s above
+                raise ManifestError(f'Leftover trusted file items: {data!r}')
+
+        else:
+            raise ManifestError(f'Unknown trusted file format: {data!r}')
+
+        return cls(uri, sha256, chroot=chroot)
+
+    @classmethod
+    def from_realpath(cls, realpath, *, chroot=None):
+        """Create an instance from a realpath.
+
+        This is used for recursive expansion of directories.
+
+        Args:
+            realpath (pathlib.Path): path to the file
+            chroot (pathlib.Path or None): optional path to chroot, if being measured in chroot dir
+
+        Returns:
+            TrustedFile: a single instance of TrustedFile
+
+        Raises:
+            ValueError: when *chroot* is not None and realpath is not inside manifest
+        """
+        path = pathlib.PurePosixPath(realpath)
+        if chroot is not None:
+            # path.relative_to(chroot) will throw ValueError if the path is not relative to chroot
+            path = '/' / path.relative_to(chroot)
+        self = cls(f'file:{path}{"/" if realpath.is_dir() else ""}', chroot=chroot)
+        return self
+
+    def __repr__(self):
+        return (f'<{type(self).__name__}('
+                    f'uri={self.uri!r}, sha256={self.sha256!r}, chroot={self.chroot!r}'
+                f') realpath={self.realpath!r}>')
+
+
+    def to_manifest(self):
+        """Returns the representation of the current file for manifest.
+
+        Returns:
+            str or dict: To be included as element in ``sgx.trusted_files`` list.
+        """
+        if self.sha256 is None:
+            return self.uri
+        return {
+            'uri': self.uri,
+            'sha256': self.sha256,
+        }
+
+
+    def ensure_hash(self):
+        """Ensures that the trusted file carries the sha256 sum.
+
+        If not, this method will open the file and measure it.
+
+        Returns:
+            TrustedFile: self
+        """
+        if self.sha256 is None:
+            with open(self.realpath, 'rb') as file:
+                sha = hashlib.sha256()
+                for chunk in iter(lambda: file.read(128 * sha.block_size), b''):
+                    sha.update(chunk)
+                self.sha256 = sha.hexdigest()
+        return self
+
+
+    def expand_directory(self, *, recursive=True, skip_inaccessible=True):
+        """If this TrustedFile is a directory, iterate over its contents.
+
+        If the TrustedFile instance is referring to a regular file, yield self and stop iteration.
+
+        Args:
+            recursive (bool): If :py:obj:`False`, will iterate only over direct descendants,
+                yielding files and directories; if :py:obj:`True`, will recursively descend into all
+                directories, yielding only regular files.
+            skip_inaccessible (bool): If :py:obj:`True` (the default), will skip entries that are
+                neither directories nor regular files, or fail ``os.access(realpath, os.R_OK)``. If
+                :py:obj:`False`, will iterate over files that failed access test and will possibly
+                error out on while measuring. This argument applies only while recursing into
+                directory (if the instance is referring to a regular file, it will be yielded
+                regardless).
+
+        Yields:
+            :py:class:`TrustedFile`: one object for each entry in the directory
+
+        Raises:
+            graminelibos.ManifestError: On errors in URIs, e.g. when directory does not have ``/``
+                at the end or *vice versa*, or when directory has ``sha256`` value.
+        """
+        if self.uri.endswith('/'):
+            if not self.realpath.is_dir():
+                raise ManifestError(f'URI {self.uri!r} ends with "/" but is not a directory')
+            if self.sha256 is not None:
+                raise ManifestError(f'Directory URI ({self.uri!r}) has sha256 specified')
+
+            for realpath in sorted(self.realpath.glob('*')):
+                # this conditional could be one-lined, but please don't, it would be unreadable
+                if skip_inaccessible:
+                    if not realpath.is_file() and not realpath.is_dir():
+                        continue
+                    if not os.access(realpath, os.R_OK):
+                        continue
+
+                tf = type(self).from_realpath(realpath, chroot=self.chroot)
+
+                if not recursive:
+                    yield tf
+                else:
+                    if realpath.is_symlink() and realpath.is_dir():
+                        # do not descend into symlinked directories
+                        continue
+                    yield from tf.expand_directory(
+                        recursive=recursive, skip_inaccessible=skip_inaccessible)
+
+        else:
+            if self.realpath.is_dir():
+                raise ManifestError(f'Directory URI ({self.uri!r}) does not end with "/"')
+            yield self
+
 
 class Manifest:
     """Just a representation of a manifest.
@@ -171,29 +383,46 @@ class Manifest:
     def dump(self, f):
         tomli_w.dump(self._manifest, f)
 
-    def expand_all_trusted_files(self):
+    def expand_all_trusted_files(self, chroot=None):
         """Expand all trusted files entries.
 
         Collects all trusted files entries, hashes each of them (skipping these which already had a
         hash present) and updates ``sgx.trusted_files`` manifest entry with the result.
 
-        Returns a list of all expanded files, i.e. files that we need to hash, and directories that
-        we needed to list.
+        Returns a list of all expanded files, as included in the manifest.
+
+        Args:
+            chroot (pathlib.Path or None): Optional chroot directory. If specified, trusted files
+                are expected to be found inside this directory, not in root of filesystem.
 
         Raises:
-            ManifestError: There was an error with the format of some trusted files in the manifest
-                or some of them could not be loaded from the filesystem.
+            graminelibos.ManifestError: There was an error with the format of some trusted files in
+                the manifest or some of them could not be loaded from the filesystem.
 
         """
         trusted_files = {}
-        expanded = []
-        for tf in self['sgx']['trusted_files']:
-            append_trusted_dir_or_file(trusted_files, tf, expanded)
+        for data in self['sgx']['trusted_files']:
+            for tf in TrustedFile.from_manifest(data, chroot=chroot).expand_directory():
+                if tf.uri in trusted_files:
+                    # On duplicate entries, pick the one that is already measured, and if both don't
+                    # have hashes, prefer existing one, to avoid dict insertion. Accept double
+                    # (matching) sha256 deduplicating them, and error out on conflicting
+                    # measurement.
+                    tf_old = trusted_files[tf.uri]
+                    if tf_old.sha256 is not None:
+                        if tf.sha256 is not None and tf.sha256 != tf_old.sha256:
+                            raise ManifestError(
+                                f'Two different sha256 values ({tf_old.sha256} and {tf.sha256}) '
+                                f'for the same URI {tf.uri!r}')
+                        continue
 
-        self['sgx']['trusted_files'] = [
-            {'uri': f'file:{k}', 'sha256': v} for k, v in trusted_files.items()
-        ]
-        return expanded
+                trusted_files[tf.uri] = tf
+
+        for tf in trusted_files.values():
+            tf.ensure_hash()
+
+        self['sgx']['trusted_files'] = [tf.to_manifest() for tf in trusted_files.values()]
+        return [tf.realpath for tf in trusted_files.values()]
 
     def get_dependencies(self):
         """Generate list of files which this manifest depends on.
@@ -205,7 +434,7 @@ class Manifest:
             list(pathlib.Path): List of paths to the files this manifest depends on.
 
         Raises:
-            ManifestError: One of the found URIs is in an unsupported format.
+            graminelibos.ManifestError: One of the found URIs is in an unsupported format.
         """
         deps = set()
 
