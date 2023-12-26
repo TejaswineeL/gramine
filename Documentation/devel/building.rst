@@ -58,65 +58,7 @@ GCC's build dependencies::
 Dependencies for SGX
 ^^^^^^^^^^^^^^^^^^^^
 
-The build of Gramine with SGX support requires the corresponding SGX software
-infrastructure to be installed on the system. We require Linux kernel with SGX
-driver built in (``CONFIG_X86_SGX=y``, which is the case for most of available
-distribution kernels), which is available since version 5.11 (and also as
-backported patches to older kernels in certain distros). Note this requires CPU
-with :term:`FLC`.
-
-Kernel version can be checked using the following command::
-
-       uname -r
-
-If your current kernel version is lower than 5.11, then you have two options:
-
-- Update the Linux kernel to at least 5.11 in your OS distro. If you use Ubuntu,
-  you can follow `this tutorial
-  <https://itsfoss.com/upgrade-linux-kernel-ubuntu/>`__.
-
-- Install out-of-tree driver and use our provided patches to the Linux kernel
-  version 5.4. See section :ref:`legacy-kernel-and-hardware` for the exact
-  steps.
-
-1. Required packages
-""""""""""""""""""""
-Run the following commands on Ubuntu to install SGX-related dependencies::
-
-    sudo apt-get install -y libprotobuf-c-dev protobuf-c-compiler \
-        protobuf-compiler python3-cryptography python3-pip python3-protobuf
-
-2. Install Intel SGX SDK/PSW
-""""""""""""""""""""""""""""
-
-Follow the installation instructions from the latest version of "Intel SGX
-Software Installation Guide":
-
-- https://download.01.org/intel-sgx/latest/dcap-latest/linux/docs/Intel_SGX_SW_Installation_Guide_for_Linux.pdf
-
-In general, various documentation for Intel SGX SDK/PSW can be found here:
-
-- https://download.01.org/intel-sgx/latest/dcap-latest/linux/docs/
-- https://download.01.org/intel-sgx/latest/linux-latest/docs/
-
-Additional information, package descriptions, etc. can be found in the official
-"Intel SGX for Linux" GitHub repo:
-
-- https://github.com/intel/linux-sgx
-
-3. Install dependencies for DCAP
-""""""""""""""""""""""""""""""""
-
-If you plan on enabling ``-Ddcap`` option (see :term:`DCAP`), you need to install
-``libsgx-dcap-quote-verify`` package::
-
-   # Below commands work on Ubuntu 22.04 LTS and 20.04 LTS
-   sudo curl -fsSLo /usr/share/keyrings/intel-sgx-deb.asc https://download.01.org/intel-sgx/sgx_repo/ubuntu/intel-sgx-deb.key
-   echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-sgx-deb.asc] https://download.01.org/intel-sgx/sgx_repo/ubuntu $(lsb_release -sc) main" \
-   | sudo tee /etc/apt/sources.list.d/intel-sgx.list
-
-   sudo apt-get update
-   sudo apt-get install libsgx-dcap-quote-verify-dev
+If the dependencies for SGX are not installed, please refer::doc:`Set up the host environment<sgx-setup>`.
 
 Build Gramine
 -------------
@@ -290,9 +232,17 @@ already created a signing key.
 
 The following command generates an |~| RSA 3072 key suitable for signing SGX
 enclaves and stores it in :file:`{HOME}/.config/gramine/enclave-key.pem`.
-Protect this key and do not disclose it to anyone::
+Protect this key and do not disclose it to anyone. Also see :doc:`manpages/gramine-sgx-gen-private-key`.::
 
    gramine-sgx-gen-private-key
+
+Signing an SGX enclave is a required step in Intel SGX. First, SGX platforms
+only load signed enclave images. Second, the enclave's signed structure (called
+SIGSTRUCT) includes a measurement of the enclave code (called MRENCLAVE), the
+derivative of the public key (called MRSIGNER) and other metadata; thus, the
+process of enclave signing binds together these measurements of the loaded
+enclave, and subsequent SGX attestation can prove the genuineness of this
+enclave based on these measurements.
 
 After signing the application's manifest, users may ship the application and
 Gramine binaries, along with an SGX-specific manifest (``.manifest.sgx``

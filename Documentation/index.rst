@@ -80,7 +80,7 @@ first. Further, to achieve security and performance guarantees, Gramine must be
 configured appropriately for each application.
 
 - :doc:`Set up the host environment<sgx-setup>` - Set up the host environment
-  and prepare a signing key.
+  and install the dependencies for SGX.
 - :doc:`Provide an application-specific configuration file<manifest-syntax>` -
   Gramine requires a so-called manifest file for each application.
 - :doc:`Set up attestation<attestation>` -- If you intend to use remote
