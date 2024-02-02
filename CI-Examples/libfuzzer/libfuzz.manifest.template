@@ -1,0 +1,71 @@
+# lib-fuzz manifest example
+sgx.nonpie_binary = true
+loader.entrypoint = "file:{{ gramine.libos }}"
+libos.entrypoint = "/dir_loop"
+
+loader.log_level = "error"
+
+loader.env.LD_LIBRARY_PATH = "/lib:/lib:{{ arch_libdir }}:/usr/{{ arch_libdir }}"
+
+# Python's NumPy spawns as many threads as there are CPU cores, and each thread
+# consumes a chunk of memory, so on large machines 1G enclave size may be not enough.
+# We limit the number of spawned threads via OMP_NUM_THREADS env variable.
+loader.env.OMP_NUM_THREADS = "4"
+
+loader.insecure__use_cmdline_argv = true
+
+sys.enable_sigterm_injection = true
+
+fs.mounts = [
+  { path = "/lib", uri = "file:{{ gramine.runtimedir() }}" },
+  { path = "{{ arch_libdir }}", uri = "file:{{ arch_libdir }}" },
+  { path = "/usr/{{ arch_libdir }}", uri = "file:/usr/{{ arch_libdir }}" },
+  { path = "/usr", uri = "file:/usr" },
+  { path = "/bin", uri = "file:/bin" },
+#  { path = "/home/intel/tejaswinee/libfuzzer", uri = "file:/home/intel/tejaswinee/libfuzzer" },
+#  { path = "/home/intel/tejaswinee/gramine1.5/gramine/CI-Examples/libfuzz/", uri = "file:/home/intel/tejaswinee/gramine1.5/gramine/CI-Examples/libfuzz/" },
+ # { path = "/home/intel/tejaswinee/gramine1.5/gramine/CI-Examples/libfuzz/cipher_corpus/Apple.txt", uri = "file:/home/intel/tejaswinee/gramine1.5/gramine/CI-Examples/libfuzz/cipher_corpus/Apple.txt", type = "encrypted", key_name = "wrap_key" },
+ # { path = "/home/intel/tejaswinee/gramine1.5/gramine/CI-Examples/libfuzz/cipher_corpus/aPple.txt", uri = "file:/home/intel/tejaswinee/gramine1.5/gramine/CI-Examples/libfuzz/cipher_corpus/aPple.txt", type = "encrypted", key_name = "wrap_key" },
+ # { path = "/home/intel/tejaswinee/gramine1.5/gramine/CI-Examples/libfuzz/cipher_corpus/apPle.txt", uri = "file:/home/intel/tejaswinee/gramine1.5/gramine/CI-Examples/libfuzz/cipher_corpus/apPle.txt", type = "encrypted", key_name = "wrap_key" },
+#  { path = "/cipher_corpus/Apple.txt", uri = "file:cipher_corpus/Apple.txt", type = "encrypted", key_name = "wrap_key" },
+#  { path = "/cipher_corpus/apPle.txt", uri = "file:cipher_corpus/apPle.txt", type = "encrypted", key_name = "wrap_key" },
+#  { path = "/cipher_corpus/aPple.txt", uri = "file:cipher_corpus/aPple.txt", type = "encrypted", key_name = "wrap_key" },
+  { path = "/cipher_corpus", uri = "file:cipher_corpus", type = "encrypted", key_name = "wrap_key" },
+  { path = "/dir_loop.sh", uri = "file:dir_loop.sh" },
+  { path = "/example_fuzzer", uri = "file:example_fuzzer" },
+#  { path = "/address_ex", uri = "file:address_ex" },
+#  { path = "/memory_ex", uri = "file:memory_ex" },
+#  { path = "/a.out", uri = "file:a.out" },
+#  { path = "/clang_example", uri = "file:clang_example" },
+ # { path = "/gcc_example", uri = "file:gcc_example" },
+  { type = "tmpfs", path = "/tmp" },
+]
+sgx.file_check_policy = "allow_all_but_log"
+
+fs.insecure__keys.wrap_key = "F558C86EE3480D54A0F4C8083B191833"
+sys.stack.size = "1G"
+sys.enable_extra_runtime_domain_names_conf = true
+
+sgx.debug = true
+sgx.edmm_enable = {{ 'true' if env.get('EDMM', '0') == '1' else 'false' }}
+sgx.enclave_size = "32G"
+sgx.max_threads = 32
+
+
+sgx.trusted_files = [
+  "file:{{ gramine.libos }}",
+  "file:{{ gramine.runtimedir() }}/",
+  "file:{{ arch_libdir }}/",
+  "file:/usr/{{ arch_libdir }}/",
+ # "file:/home/intel/tejaswinee/gramine1.5/gramine/CI-Examples/libfuzz/corpus/",
+ # "file:/home/intel/tejaswinee/gramine1.5/gramine/CI-Examples/libfuzz/cipher_corpus/",
+ # "file:/home/intel/tejaswinee/gramine1.5/gramine/CI-Examples/libfuzz/",
+]
+
+#sgx.allowed_files = [
+#  "file:/home/intel/tejaswinee/gramine1.5/gramine/CI-Examples/libfuzz/corpus/",
+#  "file:/home/intel/tejaswinee/gramine1.5/gramine/CI-Examples/libfuzz/cipher_corpus/",
+#  "file:/home/intel/tejaswinee/gramine1.5/gramine/CI-Examples/libfuzz/",
+#]
+
+
