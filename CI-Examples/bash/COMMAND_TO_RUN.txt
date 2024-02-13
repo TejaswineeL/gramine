@@ -1,0 +1,1 @@
+gramine-direct bash -c '/usr/lib/jvm/java-1.11.0-openjdk-amd64/bin/java -cp /opt/spark-3.5.0-bin-hadoop3/conf/:/opt/spark-3.5.0-bin-hadoop3/jars/*:/opt/spark-3.5.0-bin-hadoop3/examples/jars/*  -Xmx16g org.apache.spark.deploy.SparkSubmit     --master local[4]  /opt/spark-3.5.0-bin-hadoop3/examples/src/main/python/pi.py 1'
