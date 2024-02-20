@@ -5,7 +5,7 @@
 # including ls, cat, cp, date, and rm.
 
 loader.entrypoint = "file:{{ gramine.libos }}"
-libos.entrypoint = "/dir_loop"
+libos.entrypoint = "{{ execdir }}/bash"
 
 loader.log_level = "{{ log_level }}"
 
