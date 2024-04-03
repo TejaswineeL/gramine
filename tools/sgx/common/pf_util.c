@@ -25,6 +25,7 @@
 #include "api.h"
 #include "path_utils.h"
 #include "perm.h"
+#include "spinlock.h"
 #include "util.h"
 
 /* High-level protected files helper functions. */
@@ -93,6 +94,18 @@ static pf_status_t linux_write(pf_handle_t handle, const void* buffer, uint64_t 
         size -= ret;
         buffer_offset += ret;
     }
+    return PF_STATUS_SUCCESS;
+}
+
+static pf_status_t linux_fsync(pf_handle_t handle) {
+    int fd = *(int*)handle;
+    DBG("linux_fsync: fd %d\n", fd);
+    int ret = fsync(fd);
+    if (ret < 0) {
+        ERROR("fsync failed: %s\n", strerror(errno));
+        return PF_STATUS_CALLBACK_FAILED;
+    }
+
     return PF_STATUS_SUCCESS;
 }
 
@@ -185,8 +198,14 @@ out:
 static mbedtls_entropy_context g_entropy;
 static mbedtls_ctr_drbg_context g_prng;
 
+/* CTR_DRBG functions of mbedTLS are not thread-safe, must explicitly sync them */
+static spinlock_t g_mbedtls_ctr_drbg_lock = INIT_SPINLOCK_UNLOCKED;
+
 static pf_status_t mbedtls_random(uint8_t* buffer, size_t size) {
-    if (mbedtls_ctr_drbg_random(&g_prng, buffer, size) != 0) {
+    spinlock_lock(&g_mbedtls_ctr_drbg_lock);
+    int ret = mbedtls_ctr_drbg_random(&g_prng, buffer, size);
+    spinlock_unlock(&g_mbedtls_ctr_drbg_lock);
+    if (ret != 0) {
         ERROR("Failed to get random bytes\n");
         return PF_STATUS_CALLBACK_FAILED;
     }
@@ -207,7 +226,7 @@ static int pf_set_linux_callbacks(pf_debug_f debug_f) {
         return -1;
     }
 
-    pf_set_callbacks(linux_read, linux_write, linux_truncate, mbedtls_aes_cmac,
+    pf_set_callbacks(linux_read, linux_write, linux_fsync, linux_truncate, mbedtls_aes_cmac,
                      mbedtls_aes_gcm_encrypt, mbedtls_aes_gcm_decrypt, mbedtls_random, debug_f);
     return 0;
 }
@@ -226,7 +245,9 @@ int pf_init(void) {
 int pf_generate_wrap_key(const char* wrap_key_path) {
     pf_key_t wrap_key;
 
+    spinlock_lock(&g_mbedtls_ctr_drbg_lock);
     int ret = mbedtls_ctr_drbg_random(&g_prng, (unsigned char*)&wrap_key, sizeof(wrap_key));
+    spinlock_unlock(&g_mbedtls_ctr_drbg_lock);
     if (ret != 0) {
         ERROR("Failed to read random bytes: %d\n", ret);
         return ret;
@@ -330,7 +351,7 @@ int pf_encrypt_file(const char* input_path, const char* output_path, const pf_ke
             break;
 
         if (chunk_size < 0) {
-            if (errno == -EINTR)
+            if (errno == EINTR)
                 continue;
 
             ERROR("Failed to read file '%s': %s\n", input_path, strerror(errno));
@@ -458,7 +479,7 @@ int pf_decrypt_file(const char* input_path, const char* output_path, bool verify
         ssize_t written = write(output, chunk, chunk_size);
 
         if (written < 0) {
-            if (errno == -EINTR)
+            if (errno == EINTR)
                 continue;
 
             ERROR("Failed to write file '%s': %s\n", output_path, strerror(errno));

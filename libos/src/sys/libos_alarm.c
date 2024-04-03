@@ -56,17 +56,25 @@ static spinlock_t g_real_itimer_lock = INIT_SPINLOCK_UNLOCKED;
 static void signal_itimer(IDTYPE caller, void* arg) {
     // XXX: Can we simplify this code or streamline with the other callback?
     __UNUSED(caller);
+    __UNUSED(arg);
 
     spinlock_lock(&g_real_itimer_lock);
 
-    if (g_real_itimer.timeout != (unsigned long)arg) {
-        spinlock_unlock(&g_real_itimer_lock);
-        return;
-    }
-
     g_real_itimer.timeout += g_real_itimer.reset;
-    g_real_itimer.reset = 0;
+    uint64_t next_reset = g_real_itimer.reset;
+
     spinlock_unlock(&g_real_itimer_lock);
+
+    if (next_reset) {
+        int64_t ret = install_async_event(/*object=*/NULL, next_reset, &signal_itimer,
+                                          /*arg=*/NULL);
+        if (ret < 0) {
+            log_error(
+                "failed to re-enqueue the next timer event initially set up by 'setitimer()': %s",
+                unix_strerror(ret));
+            die_or_inf_loop();
+        }
+    }
 
     signal_current_proc(SIGALRM);
 }
@@ -105,8 +113,7 @@ long libos_syscall_setitimer(int which, struct __kernel_itimerval* value,
                                : 0;
     uint64_t current_reset = g_real_itimer.reset;
 
-    int64_t install_ret = install_async_event(NULL, next_value, &signal_itimer,
-                                              (void*)(setup_time + next_value));
+    int64_t install_ret = install_async_event(NULL, next_value, &signal_itimer, /*arg=*/NULL);
 
     if (install_ret < 0) {
         spinlock_unlock(&g_real_itimer_lock);

@@ -5,7 +5,7 @@
 project(
     'gramine',
     'c', 'cpp',
-    version: '1.6post~UNRELEASED',
+    version: '1.6.2post~UNRELEASED',
     license: 'LGPLv3+',
 
     meson_version: '>=0.56',
@@ -225,7 +225,7 @@ tomlc99_src = tomlc99_proj.get_variable('tomlc99_src')
 
 uthash_dep = subproject('uthash-2.1.0').get_variable('uthash_dep')
 
-mbedtls_proj = subproject('mbedtls-mbedtls-3.5.0')
+mbedtls_proj = subproject('mbedtls-mbedtls-3.5.2')
 mbedtls_static_dep = mbedtls_proj.get_variable('mbedtls_static_dep')
 mbedtls_pal_dep = mbedtls_proj.get_variable('mbedtls_pal_dep')
 
@@ -283,7 +283,7 @@ subdir('python')
 subdir('tools')
 
 if get_option('libc') == 'glibc'
-    subproject('glibc-2.38-1')
+    subproject('glibc-2.39-1')
 elif get_option('libc') == 'musl'
     subproject('musl-1.2.4')
 endif
