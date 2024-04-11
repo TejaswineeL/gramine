@@ -15,23 +15,22 @@
                      *      __sigset_t uc_sigmask;
                      */
 
-
+#include <dirent.h>
 #include <linux/signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-#include <dirent.h>
 #include <unistd.h>
 
 #include "api.h"
 #include "cpu.h"
 #include "debug_map.h"
+#include "gdb_integration/sgx_gdb.h"
 #include "host_internal.h"
 #include "pal_rpc_queue.h"
+#include "pal_tcb.h"
 #include "sigreturn.h"
 #include "ucontext.h"
-#include "pal_tcb.h"
-#include "gdb_integration/sgx_gdb.h"
 
 #define MAX_DBG_THREADS 4096
 
