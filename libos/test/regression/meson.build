@@ -20,6 +20,8 @@ tests = {
     'epoll_epollet': {},
     'epoll_test': {},
     'eventfd': {},
+    'eventfd_fork': {},
+    'eventfd_read_then_write': {},
     'exec': {},
     'exec_fork': {},
     'exec_invalid_args': {},
