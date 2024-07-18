@@ -89,6 +89,7 @@ async_exit_pointer:
     # Call sgx_profile_sample_aex with %rdi = TCS
     movq %rbx, %rdi
     call sgx_profile_sample_aex
+    call dump_and_reset_stats
 
     # Restore stack
     movq %rbp, %rsp
@@ -103,6 +104,7 @@ async_exit_pointer:
     .cfi_adjust_cfa_offset -8
     movb $0, %gs:PAL_HOST_TCB_IN_AEX_PROF
 #endif
+
 
     .cfi_endproc
 

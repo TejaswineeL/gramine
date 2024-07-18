@@ -62,6 +62,9 @@ extern bool g_trigger_profile_reinit;
 extern char g_profile_filename[128];
 #endif /* DEBUG */
 
+extern bool g_trigger_stats_reset;
+extern int g_stats_reset_recipient_thread_tid;
+
 void* realloc(void* ptr, size_t new_size);
 
 int open_sgx_driver(void);
@@ -156,6 +159,8 @@ void sgx_profile_finish(void);
 
 /* Record a sample during AEX */
 void sgx_profile_sample_aex(void* tcs);
+
+void dump_and_reset_stats(void);
 
 /* Record a sample during OCALL (inner state) */
 void sgx_profile_sample_ocall_inner(void* enclave_gpr);

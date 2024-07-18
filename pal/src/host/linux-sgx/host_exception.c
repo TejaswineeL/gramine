@@ -22,12 +22,16 @@
 #include "api.h"
 #include "cpu.h"
 #include "debug_map.h"
+#include "gdb_integration/sgx_gdb.h"
 #include "host_internal.h"
 #include "pal_rpc_queue.h"
+#include "pal_tcb.h"
 #include "sigreturn.h"
 #include "ucontext.h"
 
 static const int ASYNC_SIGNALS[] = {SIGTERM, SIGCONT};
+bool g_trigger_stats_reset = false;
+int g_stats_reset_recipient_thread_tid = 0;
 
 static int block_signal(int sig, bool block) {
     int how = block ? SIG_BLOCK : SIG_UNBLOCK;
@@ -188,17 +192,73 @@ static void handle_dummy_signal(int signum, siginfo_t* info, struct ucontext* uc
     /* we need this handler to interrupt blocking syscalls in RPC threads */
 }
 
-#ifdef DEBUG
+static size_t send_sigusr1_signal_to_children(int main_tid) {
+    size_t no_of_signals_sent = 0;
+
+    for (size_t i = 0; i < MAX_DBG_THREADS; i++) {
+        int child_tid = ((struct enclave_dbginfo*)DBGINFO_ADDR)->thread_tids[i];
+        if (child_tid == main_tid)
+            continue;
+
+        if (child_tid) {
+            log_always("child_tid %d", child_tid);
+            DO_SYSCALL(tkill, child_tid, SIGUSR1);
+            no_of_signals_sent++;
+        }
+    }
+    return no_of_signals_sent;
+}
+
+void dump_and_reset_stats(void) {
+    log_always("dump_and_reset_stats");
+
+    if(__atomic_load_n(&g_trigger_stats_reset, __ATOMIC_ACQUIRE) == true) {
+
+        static size_t no_of_children_visited = 0;
+        int current_tid = DO_SYSCALL(gettid);
+        if (__atomic_load_n(&g_stats_reset_recipient_thread_tid, __ATOMIC_ACQUIRE) == current_tid) {
+            size_t no_of_children = send_sigusr1_signal_to_children(current_tid);
+            log_always("current_tid %d", current_tid);
+            log_always("----- DUMPING and RESETTING SGX STATS -----");
+            while ((__atomic_load_n(&no_of_children_visited, __ATOMIC_ACQUIRE)) < no_of_children) {
+                DO_SYSCALL(sched_yield);
+            }
+
+            update_and_print_stats(/*process_wide=*/true);
+            __atomic_store_n(&no_of_children_visited, 0, __ATOMIC_RELEASE);
+            __atomic_store_n(&g_stats_reset_recipient_thread_tid, 0, __ATOMIC_RELEASE);
+            __atomic_store_n(&g_trigger_stats_reset, false, __ATOMIC_RELEASE);
+        } else {
+            update_and_print_stats(/*process_wide=*/false);
+            __atomic_fetch_add(&no_of_children_visited, 1, __ATOMIC_ACQ_REL);
+        }
+    }
+    pal_host_tcb_reset_stats();
+}
+
 static void handle_sigusr1(int signum, siginfo_t* info, struct ucontext* uc) {
     __UNUSED(signum);
     __UNUSED(info);
     __UNUSED(uc);
 
+    if (g_sgx_enable_stats) {
+        int64_t expected_tid = 0;
+        if (__atomic_compare_exchange_n(&g_stats_reset_recipient_thread_tid, &expected_tid, 
+            DO_SYSCALL(gettid), /*weak=*/false,
+            __ATOMIC_ACQ_REL, __ATOMIC_RELAXED) == true) {
+            /* first thread that gets SIGUSR1 -- this thread gets the signal from the host OS */
+            __atomic_store_n(&g_trigger_stats_reset, true, __ATOMIC_RELEASE);
+            log_always("handle_sigusr1");
+        }
+        //dump_and_reset_stats();
+    }
+
+#ifdef DEBUG
     if (g_pal_enclave.profile_enable) {
         __atomic_store_n(&g_trigger_profile_reinit, true, __ATOMIC_RELEASE);
     }
-}
 #endif /* DEBUG */
+}
 
 int sgx_signal_setup(void) {
     int ret;
@@ -238,11 +298,9 @@ int sgx_signal_setup(void) {
     if (ret < 0)
         goto err;
 
-#ifdef DEBUG
     ret = set_signal_handler(SIGUSR1, handle_sigusr1);
     if (ret < 0)
         goto err;
-#endif /* DEBUG */
 
     /* SIGUSR2 is reserved for Gramine usage: interrupting blocking syscalls in RPC threads.
      * We block SIGUSR2 in enclave threads; it is unblocked by each RPC thread explicitly. */
